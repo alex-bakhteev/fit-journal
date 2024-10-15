@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fit-journal/internal/config"
-	"fit-journal/internal/user"
-	"fit-journal/internal/user/db"
-	"fit-journal/pkg/client/mongodb"
+	user "fit-journal/internal/entities/user"
+	userDB "fit-journal/internal/entities/user/db"
+	workout "fit-journal/internal/entities/workout"
+	"fit-journal/internal/entities/workout/db"
+	"fit-journal/pkg/client/postgresql"
 	"fit-journal/pkg/logging"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
@@ -20,28 +22,34 @@ import (
 func main() {
 	logger := logging.GetLogger()
 	logger.Info("Create router")
+	router := httprouter.New() // Необходимо инициализировать роутер
 
+	// Получение конфигурации
 	cfg := config.GetConfig()
 
-	mongoDBClient, err := mongodb.NewClient(context.Background(),
-		cfg.MongoDB.Host, cfg.MongoDB.Port, cfg.MongoDB.Username, cfg.MongoDB.Password, cfg.MongoDB.Database, cfg.MongoDB.AuthDB)
+	// Инициализация PostgreSQL клиента
+	logger.Info("Initialize PostgreSQL client")
+	ctx := context.Background()
+	pgClient, err := postgresql.NewClient(ctx, 3, cfg.Storage)
 	if err != nil {
-		panic(err)
+		logger.Fatalf("Failed to initialize PostgreSQL client: %v", err)
 	}
-	//filledUser := user.User{
-	//	ID:           "",
-	//	Email:        "someone@example.com",
-	//	Username:     "Name",
-	//	PasswordHash: "12345",
-	//}
-	storage := db.NewStorage(mongoDBClient, cfg.MongoDB.Collection, logger)
-	users, err := storage.FindAll(context.Background())
-	fmt.Println(users)
+	defer pgClient.Close()
 
-	router := httprouter.New()
-	handler := user.NewHandler(logger)
-	handler.Register(router)
+	// Регистрируем репозиторий для пользователя
+	logger.Info("Initialize user repository")
+	userRepo := userDB.NewRepository(pgClient, logger)
 
+	// Регистрируем хендлеры для пользователя
+	logger.Info("Register user handler")
+	userHandler := user.NewHandler(logger, userRepo)
+	userHandler.Register(router)
+
+	workoutRepo := db.NewRepository(pgClient, logger)
+	workoutHandler := workout.NewHandler(logger, workoutRepo, userRepo)
+	workoutHandler.Register(router)
+
+	// Запускаем сервер
 	start(router, cfg)
 }
 
@@ -71,7 +79,8 @@ func start(router *httprouter.Router, cfg *config.Config) {
 	server := http.Server{
 		Handler:      router,
 		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second}
+		ReadTimeout:  15 * time.Second,
+	}
 
 	logger.Fatal(server.Serve(listener))
 }

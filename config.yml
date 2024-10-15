@@ -3,11 +3,11 @@
 is_debug: true
 listen:
   type: port
-mongodb:
+  port: 1234
+storage:
   host: localhost
-  port: 27017
-  database: user-service
-  auth_db:
-  username:
-  password:
-  collection: users
+  port: 5432
+  database: postgres
+  username: postgres
+  password: postgres
+JWT_secret: salt

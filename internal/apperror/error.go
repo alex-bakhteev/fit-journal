@@ -2,15 +2,11 @@ package apperror
 
 import "encoding/json"
 
-var (
-	ErrNotFound = NewAppError(nil, "not found", "", "US-000003")
-)
-
 type AppError struct {
 	Err              error  `json:"-"`
 	Message          string `json:"message,omitempty"`
 	DeveloperMessage string `json:"developer_message,omitempty"`
-	Code             string `json:"code,omitempty"`
+	StatusCode       int    `json:"-"`
 }
 
 func (e *AppError) Error() string {
@@ -27,15 +23,21 @@ func (e *AppError) Marshal() []byte {
 	return marshal
 }
 
-func NewAppError(err error, message, developerMessage, code string) *AppError {
+// NewAppError создает ошибку с автоматическим использованием стандартного статус-кода
+func NewAppError(err error, message, developerMessage string, statusCode int) *AppError {
+	// Если статус-код не передан (или 0), используем стандартный 500 Internal Server Error
+	if statusCode == 0 {
+		statusCode = 500
+	}
 	return &AppError{
 		Err:              err,
 		Message:          message,
 		DeveloperMessage: developerMessage,
-		Code:             code,
+		StatusCode:       statusCode,
 	}
 }
 
+// systemError создает ошибку системы, используя стандартные механизмы
 func systemError(err error) *AppError {
-	return NewAppError(err, "internal system error", err.Error(), "US-000000")
+	return NewAppError(err, "internal system error", err.Error(), 500)
 }
